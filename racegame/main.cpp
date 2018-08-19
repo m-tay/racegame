@@ -14,12 +14,14 @@ GLuint texture[1];
 // global variables
 float carLength = 1.0f;
 float carWidth = 0.5f;
-float decelRate = 0.03f;
-float maxSpeed = 1.3f;
+float decelRate = 0.00009f;
+float maxSpeed = 0.01f;
 
 // camera positions
 float cam_x = 0;
 float cam_y = 0;
+
+
 
 class Car {
 public:
@@ -27,6 +29,8 @@ public:
 	float pos_y;
 	float rot;
 	float acceleration;
+	float vel_x;
+	float vel_y;
 
 	// constructor sets car's default position
 	Car(float x, float y) {
@@ -47,10 +51,10 @@ void keyOperations(void) {
 		exit(0);
 
 	if (keyStates['w'] && playerCar.acceleration < maxSpeed)
-		playerCar.acceleration += 0.00095f;
+		playerCar.acceleration += 0.00009f;
 
 	if (keyStates['s'])
-		playerCar.acceleration -= 0.00095f;
+		playerCar.acceleration -= 0.00009f;
 
 	if (keyStates['a'])
 		playerCar.rot += 0.05f;
@@ -119,6 +123,13 @@ void renderCars(void) {
 	glRotatef(playerCar.rot, 0.0, 0.0, 1.0);
 	glTranslatef(-playerCar.pos_x, -playerCar.pos_y, 0.0f);
 
+	// apply velocity vector
+	playerCar.vel_x = -sin(playerCar.rot * (3.14159265359 / 180));	// get x velocity after converting to rads
+	playerCar.vel_y = cos(playerCar.rot * (3.14159265359 / 180));	// get y velocity after converting to rads
+
+	playerCar.pos_x += playerCar.acceleration * playerCar.vel_x;
+	playerCar.pos_y += playerCar.acceleration * playerCar.vel_y;
+
 	// draw car
 	glBegin(GL_QUADS);
 	glVertex3f(playerCar.pos_x - (carWidth / 2), playerCar.pos_y - (carLength / 2), 0.0f); // bottom left
@@ -164,8 +175,17 @@ void display(void) {
 	if (playerCar.rot > 360)
 		playerCar.rot = 0;
 
-	if (playerCar.rot < -360)
+	if (playerCar.rot < -360) 
 		playerCar.rot = 0;
+
+	
+	//std::cout << "playerCar pos_x = " << playerCar.pos_x << "\n";
+	//std::cout << "playerCar pos_y = " << playerCar.pos_y << "\n";
+	//std::cout << "playerCar vel_x = " << playerCar.vel_x << "\n";
+	//std::cout << "playerCar vel_y = " << playerCar.vel_y << "\n";
+	//std::cout << "playerCar rot  = " << playerCar.rot << "\n";
+	//std::cout << "playerCar acc  = " << playerCar.acceleration << "\n";
+	
 
 	// displays newly drawn buffer
 	glutSwapBuffers();
@@ -183,7 +203,6 @@ void timer(int t) {
 		playerCar.acceleration = 0;
 
 	glutTimerFunc(50, timer, 0);
-	std::cout << playerCar.acceleration << "\n";
 }
 
 // method to reshape windows
@@ -234,7 +253,7 @@ int main(int argc, char **argv) {
 	glutInitWindowPosition(100, 100);
 
 	// create the window, with a title
-	glutCreateWindow("OpenGL2 Tutorial");
+	glutCreateWindow("Matt's OpenGL car thing");
 
 	// use the display() function for displaying
 	glutDisplayFunc(display);
