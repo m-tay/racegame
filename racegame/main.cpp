@@ -9,7 +9,7 @@ bool* keyStates = new bool[256]();
 bool* keySpecialStates = new bool[256]();
 
 // stores all the textures
-GLuint texture[1];
+GLuint texture[2];
 
 // global variables
 float carLength = 1.0f;
@@ -83,8 +83,16 @@ int loadTextures()
 		SOIL_FLAG_MIPMAPS
 	);
 
+	texture[1] = SOIL_load_OGL_texture
+	(
+		"textures/car1.png",
+		SOIL_LOAD_AUTO,
+		SOIL_CREATE_NEW_ID,
+		SOIL_FLAG_MIPMAPS
+	);
+
 	// if doesn't load properly, return false
-	if (texture[0] == 0)
+	if (texture[0] == 0 || texture[1] == 0)
 		return false;
 
 
@@ -92,6 +100,14 @@ int loadTextures()
 	glBindTexture(GL_TEXTURE_2D, texture[0]);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+
+	glBindTexture(GL_TEXTURE_2D, texture[1]);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+
+	// enable blending on the alpha channel
+	glEnable(GL_BLEND);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
 	return true;
 }
@@ -104,16 +120,19 @@ void renderBackground(void) {
 	
 	// draw vertices
 	glBegin(GL_QUADS);
-	glVertex3f(-5000.0f, -5000.0f, -1.0f);	// bottom left
 	glTexCoord2d(0.0, 0.0);
-	glVertex3f(-5000.0f, 5000.0f, -1.0f);	// top left
-	glTexCoord2d(3000.0, 0.0);
-	glVertex3f(5000.0f, 5000.0f, -1.0f);	// top right
-	glTexCoord2d(3000.0, 3000.0);
-	glVertex3f(5000.0f, -5000.0f, -1.0f);	// bottom right
-	glTexCoord2d(0.0, 3000.0);
-	glEnd();
+	glVertex3f(-5000.0f, -5000.0f, -1.0f);	// bottom left
 
+	glTexCoord2d(0.0, 5000.0);
+	glVertex3f(-5000.0f, 5000.0f, -1.0f);	// top left
+
+	glTexCoord2d(5000.0, 5000.0);
+	glVertex3f(5000.0f, 5000.0f, -1.0f);	// top right
+
+	glTexCoord2d(5000.0, 0.0);
+	glVertex3f(5000.0f, -5000.0f, -1.0f);	// bottom right
+	
+	glEnd();
 	glDisable(GL_TEXTURE_2D); // disable texture drawing
 }
 
@@ -130,15 +149,28 @@ void renderCars(void) {
 	playerCar.pos_x += playerCar.acceleration * playerCar.vel_x;
 	playerCar.pos_y += playerCar.acceleration * playerCar.vel_y;
 
+	// enable and bind texture
+	glEnable(GL_TEXTURE_2D);
+	glBindTexture(GL_TEXTURE_2D, texture[1]);
+
 	// draw car
 	glBegin(GL_QUADS);
+	glTexCoord2d(0.0, 0.0);
 	glVertex3f(playerCar.pos_x - (carWidth / 2), playerCar.pos_y - (carLength / 2), 0.0f); // bottom left
+
+	glTexCoord2d(0.0, 1.0);
 	glVertex3f(playerCar.pos_x - (carWidth / 2), playerCar.pos_y + (carLength / 2), 0.0f); // top left
+
+	glTexCoord2d(1.0, 1.0);
 	glVertex3f(playerCar.pos_x + (carWidth / 2), playerCar.pos_y + (carLength / 2), 0.0f); // top right
+	
+	glTexCoord2d(1.0, 0.0);
 	glVertex3f(playerCar.pos_x + (carWidth / 2), playerCar.pos_y - (carLength / 2), 0.0f); // bottom right
+
+
 	glEnd();
 
-
+	glDisable(GL_TEXTURE_2D);
 
 }
 
