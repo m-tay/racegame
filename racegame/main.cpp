@@ -3,6 +3,7 @@
 #include <SOIL.h> // include the SOIL header file (for loading images)
 #include <iostream>
 #include <cmath>
+#include <vector>
 
 // arrays to store all possible keystates
 bool* keyStates = new bool[256]();
@@ -21,7 +22,21 @@ float maxSpeed = 0.01f;
 float cam_x = 0;
 float cam_y = 0;
 
+// track geometry
+struct line {
+	float x1, y1, x2, y2; 
 
+};
+
+std::vector<line> trackPoints;
+
+// each set of two trackPoints 
+void initTrack() {
+	trackPoints.push_back({ -1.0f, 1.0f, -2.0f, -2.0f});
+	trackPoints.push_back({ -2.0f, -2.0f, 10.0f, -1.5f });
+	trackPoints.push_back({ 10.0f, -1.5f , 10.0f, 10.0f});
+	trackPoints.push_back({ 10.0f, 10.0f , -1.0f, 1.0f });
+}
 
 class Car {
 public:
@@ -51,10 +66,10 @@ void keyOperations(void) {
 		exit(0);
 
 	if (keyStates['w'] && playerCar.acceleration < maxSpeed)
-		playerCar.acceleration += 0.00009f;
+		playerCar.acceleration += 0.000009f;
 
 	if (keyStates['s'])
-		playerCar.acceleration -= 0.00009f;
+		playerCar.acceleration -= 0.000009f;
 
 	if (keyStates['a'])
 		playerCar.rot += 0.05f;
@@ -121,22 +136,25 @@ void renderBackground(void) {
 	// draw vertices
 	glBegin(GL_QUADS);
 	glTexCoord2d(0.0, 0.0);
-	glVertex3f(-5000.0f, -5000.0f, -1.0f);	// bottom left
+	glVertex3f(-5000.0f, -5000.0f, 0.0f);	// bottom left
 
 	glTexCoord2d(0.0, 5000.0);
-	glVertex3f(-5000.0f, 5000.0f, -1.0f);	// top left
+	glVertex3f(-5000.0f, 5000.0f, 0.0f);	// top left
 
 	glTexCoord2d(5000.0, 5000.0);
-	glVertex3f(5000.0f, 5000.0f, -1.0f);	// top right
+	glVertex3f(5000.0f, 5000.0f, 0.0f);	// top right
 
 	glTexCoord2d(5000.0, 0.0);
-	glVertex3f(5000.0f, -5000.0f, -1.0f);	// bottom right
+	glVertex3f(5000.0f, -5000.0f, 0.0f);	// bottom right
 	
 	glEnd();
 	glDisable(GL_TEXTURE_2D); // disable texture drawing
 }
 
 void renderCars(void) {
+
+	glPushMatrix();
+	
 	// translate to centre of player car, rotate, then translate back
 	glTranslatef(playerCar.pos_x, playerCar.pos_y, 0.0f);
 	glRotatef(playerCar.rot, 0.0, 0.0, 1.0);
@@ -166,11 +184,23 @@ void renderCars(void) {
 	
 	glTexCoord2d(1.0, 0.0);
 	glVertex3f(playerCar.pos_x + (carWidth / 2), playerCar.pos_y - (carLength / 2), 0.0f); // bottom right
-
-
 	glEnd();
 
 	glDisable(GL_TEXTURE_2D);
+	glPopMatrix();
+
+}
+
+void renderTrack(void) {
+	glBegin(GL_LINES);
+
+	for (int i = 0; i < trackPoints.size(); i++)
+	{
+		glVertex3f(trackPoints[i].x1, trackPoints[i].y1, 0.0f);
+		glVertex3f(trackPoints[i].x2, trackPoints[i].y2, 0.0f);
+	}
+
+	glEnd();
 
 }
 
@@ -202,6 +232,7 @@ void display(void) {
 
 	renderBackground();
 	renderCars();
+	renderTrack();
 
 	// reset rotation
 	if (playerCar.rot > 360)
@@ -311,6 +342,8 @@ int main(int argc, char **argv) {
 	if (!loadTextures())
 		return false;
 
+	// initialise the track geometry vector
+	initTrack();
 
 	// enter GLUTs main loop
 	glutMainLoop();
