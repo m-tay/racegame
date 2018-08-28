@@ -22,15 +22,15 @@ float maxSpeed = 0.01f;
 float cam_x = 0;
 float cam_y = 0;
 
-// track geometry
+// line (track and car drawing) geometry
 struct line {
 	float x1, y1, x2, y2; 
-
 };
 
+// stores each line of the track
 std::vector<line> trackPoints;
 
-// each set of two trackPoints 
+// create the lines that define the track
 void initTrack() {
 	trackPoints.push_back({ -1.0f, 1.0f, -2.0f, -2.0f});
 	trackPoints.push_back({ -2.0f, -2.0f, 10.0f, -1.5f });
@@ -40,11 +40,11 @@ void initTrack() {
 
 class Car {
 public:
-	float pos_x;
+	float pos_x;	// stores the CENTRE POINT of the car
 	float pos_y;
-	float rot;
+	float rot;		// rotation
 	float acceleration;
-	float vel_x;
+	float vel_x;	// stores car velocity
 	float vel_y;
 
 	// constructor sets car's default position
@@ -54,6 +54,25 @@ public:
 		rot = 0.0f;
 		acceleration = 0.0f;
 	}
+
+	std::vector<line> getLines() {
+		std::vector<line> carLines;
+		
+		// left
+		carLines.push_back({ (pos_x - (carWidth / 2)), (pos_y - (carLength / 2)), (pos_x - (carWidth / 2)), (pos_y + (carLength / 2)) });
+
+		// top
+		carLines.push_back({ (pos_x - (carWidth / 2)), (pos_y + (carLength / 2)), (pos_x + (carWidth / 2)), (pos_y + (carLength / 2)) });
+		
+		// right
+		carLines.push_back({ (pos_x + (carWidth / 2)), (pos_y + (carLength / 2)), (pos_x + (carWidth / 2)), (pos_y - (carLength / 2)) });
+
+		// bottom
+		carLines.push_back({ (pos_x + (carWidth / 2)), (pos_y - (carLength / 2)), (pos_x - (carWidth / 2)), (pos_y - (carLength / 2)) });
+
+		return carLines;
+	}
+
 };
 
 // initialise objects for game
@@ -78,8 +97,6 @@ void keyOperations(void) {
 		playerCar.rot -= 0.05f;
 		
 }
-
-
 
 // processes special key presses
 void keySpecialOperations(void) {
