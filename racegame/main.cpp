@@ -47,31 +47,31 @@ public:
 	float vel_x;	// stores car velocity
 	float vel_y;
 
-	// constructor sets car's default position
-	Car(float x, float y) {
-		pos_x = x;
-		pos_y = y;
-		rot = 0.0f;
-		acceleration = 0.0f;
-	}
+// constructor sets car's default position
+Car(float x, float y) {
+pos_x = x;
+pos_y = y;
+rot = 0.0f;
+acceleration = 0.0f;
+}
 
-	std::vector<line> getLines() {
-		std::vector<line> carLines;
-		
-		// left
-		carLines.push_back({ (pos_x - (carWidth / 2)), (pos_y - (carLength / 2)), (pos_x - (carWidth / 2)), (pos_y + (carLength / 2)) });
+std::vector<line> getLines() {
+	std::vector<line> carLines;
 
-		// top
-		carLines.push_back({ (pos_x - (carWidth / 2)), (pos_y + (carLength / 2)), (pos_x + (carWidth / 2)), (pos_y + (carLength / 2)) });
-		
-		// right
-		carLines.push_back({ (pos_x + (carWidth / 2)), (pos_y + (carLength / 2)), (pos_x + (carWidth / 2)), (pos_y - (carLength / 2)) });
+	// left
+	carLines.push_back({ (pos_x - (carWidth / 2)), (pos_y - (carLength / 2)), (pos_x - (carWidth / 2)), (pos_y + (carLength / 2)) });
 
-		// bottom
-		carLines.push_back({ (pos_x + (carWidth / 2)), (pos_y - (carLength / 2)), (pos_x - (carWidth / 2)), (pos_y - (carLength / 2)) });
+	// top
+	carLines.push_back({ (pos_x - (carWidth / 2)), (pos_y + (carLength / 2)), (pos_x + (carWidth / 2)), (pos_y + (carLength / 2)) });
 
-		return carLines;
-	}
+	// right
+	carLines.push_back({ (pos_x + (carWidth / 2)), (pos_y + (carLength / 2)), (pos_x + (carWidth / 2)), (pos_y - (carLength / 2)) });
+
+	// bottom
+	carLines.push_back({ (pos_x + (carWidth / 2)), (pos_y - (carLength / 2)), (pos_x - (carWidth / 2)), (pos_y - (carLength / 2)) });
+
+	return carLines;
+}
 
 };
 
@@ -95,7 +95,7 @@ void keyOperations(void) {
 
 	if (keyStates['d'])
 		playerCar.rot -= 0.05f;
-		
+
 }
 
 // processes special key presses
@@ -143,6 +143,33 @@ int loadTextures()
 
 	return true;
 }
+
+// takes in two vectors containing <lines>, checks to see if any of them intersect
+bool isColliding(std::vector<line> a, std::vector<line> b) {
+	float dist1 = 0;
+	float dist2 = 0;
+
+	// loop through every combination of both vectors
+	for (int i = 0; i < a.size(); i++) {
+		for (int j = 0; j < b.size(); j++) {
+
+			// calculate distance to point of intersection
+			float dist1 =  ((b[j].x2 - b[j].x1) * (a[i].y1 - b[j].y1) - (b[j].y2 - b[j].y1) * (a[i].x1 - b[j].x1)) /
+							((b[j].y2 - b[j].y1) * (a[i].x2 - a[i].x1) - (b[j].x2 - b[j].x1) * (a[i].y2 - a[i].y1));
+
+			float dist2 =  ((a[i].x2 - a[i].x1) * (a[i].y1 - b[j].y1) - (a[i].y2 - a[i].y1) * (a[i].x1 - b[j].x1)) /
+							((b[j].y2 - b[j].y1) * (a[i].x2 - a[i].x1) - (b[j].x2 - b[j].x1) * (a[i].y2 - a[i].y1));
+
+			// if dist1 and dist1 are both between 0 and 1, there is a collision
+			if (dist1 >= 0 && dist1 <= 1 && dist2 >= 0 && dist2 <= 1)
+				return true;
+		}
+	}
+
+	// no collisions detected
+	return false;
+}
+
 
 // draws background
 void renderBackground(void) {
@@ -257,19 +284,9 @@ void display(void) {
 
 	if (playerCar.rot < -360) 
 		playerCar.rot = 0;
-
 	
-	//std::cout << "playerCar pos_x = " << playerCar.pos_x << "\n";
-	//std::cout << "playerCar pos_y = " << playerCar.pos_y << "\n";
-	//std::cout << "playerCar vel_x = " << playerCar.vel_x << "\n";
-	//std::cout << "playerCar vel_y = " << playerCar.vel_y << "\n";
-	//std::cout << "playerCar rot  = " << playerCar.rot << "\n";
-	//std::cout << "playerCar acc  = " << playerCar.acceleration << "\n";
-	
-
 	// displays newly drawn buffer
 	glutSwapBuffers();
-
 
 }
 
