@@ -19,6 +19,11 @@ float carWidth = 0.5f;
 float decelRate = 0.00009f;
 float maxSpeed = 0.01f;
 
+// pre-compute divisions 
+float carLengthHalf = carLength / 2;
+float carWidthHalf = carWidth / 2;
+float piOver180 = 3.14159265359 / 180;
+
 // camera positions
 float cam_x = 0;
 float cam_y = 0;
@@ -64,14 +69,14 @@ public:
 		float tl_xr, tl_yr, tr_xr, tr_yr, bl_xr, bl_yr, br_xr, br_yr;
 
 		// set corner values for collision detection
-		tl_x = pos_x - (carWidth / 2);
-		tl_y = pos_y + (carLength / 2);
-		tr_x = pos_x + (carWidth / 2);
-		tr_y = pos_y + (carLength / 2);
-		bl_x = pos_x - (carWidth / 2);
-		bl_y = pos_y - (carLength / 2);
-		br_x = pos_x + (carWidth / 2);
-		br_y = pos_y - (carLength / 2);
+		tl_x = pos_x - carWidthHalf;
+		tl_y = pos_y + carLengthHalf;
+		tr_x = pos_x + carWidthHalf;
+		tr_y = pos_y + carLengthHalf;
+		bl_x = pos_x - carWidthHalf;
+		bl_y = pos_y - carLengthHalf;
+		br_x = pos_x + carWidthHalf;
+		br_y = pos_y - carLengthHalf;
 
 		// translation to origin
 		tl_x -= pos_x;
@@ -84,17 +89,17 @@ public:
 		br_y -= pos_y;
 		
 		// rotation
-		tl_xr = (tl_x * cos((rot * (3.14159265359 / 180))) - (tl_y * sin((rot * (3.14159265359 / 180)))));
-		tl_yr = (tl_x * sin((rot * (3.14159265359 / 180))) + (tl_y * cos((rot * (3.14159265359 / 180)))));
+		tl_xr = (tl_x * cos((rot * piOver180)) - (tl_y * sin((rot * piOver180))));
+		tl_yr = (tl_x * sin((rot * piOver180)) + (tl_y * cos((rot * piOver180))));
 
-		tr_xr = (tr_x * cos((rot * (3.14159265359 / 180))) - (tr_y * sin((rot * (3.14159265359 / 180)))));
-		tr_yr = (tr_x * sin((rot * (3.14159265359 / 180))) + (tr_y * cos((rot * (3.14159265359 / 180)))));
+		tr_xr = (tr_x * cos((rot * piOver180)) - (tr_y * sin((rot * piOver180))));
+		tr_yr = (tr_x * sin((rot * piOver180)) + (tr_y * cos((rot * piOver180))));
 
-		bl_xr = (bl_x * cos((rot * (3.14159265359 / 180))) - (bl_y * sin((rot * (3.14159265359 / 180)))));
-		bl_yr = (bl_x * sin((rot * (3.14159265359 / 180))) + (bl_y * cos((rot * (3.14159265359 / 180)))));
+		bl_xr = (bl_x * cos((rot * piOver180)) - (bl_y * sin((rot * piOver180))));
+		bl_yr = (bl_x * sin((rot * piOver180)) + (bl_y * cos((rot * piOver180))));
 
-		br_xr = (br_x * cos((rot * (3.14159265359 / 180))) - (br_y * sin((rot * (3.14159265359 / 180)))));
-		br_yr = (br_x * sin((rot * (3.14159265359 / 180))) + (br_y * cos((rot * (3.14159265359 / 180)))));
+		br_xr = (br_x * cos((rot * piOver180)) - (br_y * sin((rot * piOver180))));
+		br_yr = (br_x * sin((rot * piOver180)) + (br_y * cos((rot * piOver180))));
 
 		// translate back
 		// translation to origin
@@ -264,8 +269,8 @@ void renderCars(void) {
 	glTranslatef(-playerCar.pos_x, -playerCar.pos_y, 0.0f);
 
 	// apply velocity vector
-	playerCar.vel_x = -sin(playerCar.rot * (3.14159265359 / 180));	// get x velocity after converting to rads
-	playerCar.vel_y = cos(playerCar.rot * (3.14159265359 / 180));	// get y velocity after converting to rads
+	playerCar.vel_x = -sin(playerCar.rot * piOver180);	// get x velocity after converting to rads
+	playerCar.vel_y = cos(playerCar.rot * piOver180);	// get y velocity after converting to rads
 	
 	// collision handling
 	if (isColliding(playerCar.getCarCorners(), trackPoints)) {
@@ -290,16 +295,16 @@ void renderCars(void) {
 	// draw car
 	glBegin(GL_QUADS);
 	glTexCoord2d(0.0, 0.0);
-	glVertex3f(playerCar.pos_x - (carWidth / 2), playerCar.pos_y - (carLength / 2), 0.0f); // bottom left
+	glVertex3f(playerCar.pos_x - carWidthHalf, playerCar.pos_y - carLengthHalf, 0.0f); // bottom left
 
 	glTexCoord2d(0.0, 1.0);
-	glVertex3f(playerCar.pos_x - (carWidth / 2), playerCar.pos_y + (carLength / 2), 0.0f); // top left
+	glVertex3f(playerCar.pos_x - carWidthHalf, playerCar.pos_y + carLengthHalf, 0.0f); // top left
 
 	glTexCoord2d(1.0, 1.0);
-	glVertex3f(playerCar.pos_x + (carWidth / 2), playerCar.pos_y + (carLength / 2), 0.0f); // top right
+	glVertex3f(playerCar.pos_x + carWidthHalf, playerCar.pos_y + carLengthHalf, 0.0f); // top right
 	
 	glTexCoord2d(1.0, 0.0);
-	glVertex3f(playerCar.pos_x + (carWidth / 2), playerCar.pos_y - (carLength / 2), 0.0f); // bottom right
+	glVertex3f(playerCar.pos_x + carWidthHalf, playerCar.pos_y - carLengthHalf, 0.0f); // bottom right
 	glEnd();
 	
 	
