@@ -1,9 +1,11 @@
-#include <glew.h> // include the GLEW header file  
-#include <glut.h> // include the GLUT header file  
+//#include <glew.h> // include the GLEW header file  
+#include <freeglut.h> // include the GLUT header file  
 #include <SOIL.h> // include the SOIL header file (for loading images)
 #include <iostream>
 #include <cmath>
 #include <vector>
+#include <iomanip>
+#include <sstream>
 
 // arrays to store all possible keystates
 bool* keyStates = new bool[256]();
@@ -13,36 +15,60 @@ bool* keySpecialStates = new bool[256]();
 GLuint texture[2];
 
 // global variables
-bool debugMode = true;	// draws bounding boxes
+bool debugMode = false;	// draws bounding boxes
 float carLength = 1.0f;
 float carWidth = 0.5f;
 float decelRate = 0.00009f;
-float maxSpeed = 0.01f;
+float maxSpeed = 0.007f;
 
 // pre-compute divisions 
 float carLengthHalf = carLength / 2;
 float carWidthHalf = carWidth / 2;
-float piOver180 = 3.14159265359 / 180;
+float piOver180 = 3.14159265359f / 180;
 
 // camera positions
 float cam_x = 0;
 float cam_y = 0;
 
 // line (track and car drawing) geometry
-struct line {
-	float x1, y1, x2, y2; 
+struct vertex {
+	float x, y;
+};
+
+struct edge {
+	vertex p1, p2;
 };
 
 // stores each line of the track
-std::vector<line> trackPoints;
+std::vector<edge> trackEdges;
+std::vector<edge> startLine;
+
 
 // create the lines that define the track
 void initTrack() {
-	trackPoints.push_back({ -1.0f, 1.0f, -2.0f, -2.0f});
-	trackPoints.push_back({ -2.0f, -2.0f, 10.0f, -1.5f });
-	trackPoints.push_back({ 10.0f, -1.5f , 10.0f, 10.0f});
-	trackPoints.push_back({ 10.0f, 10.0f , -1.0f, 1.0f });
+	// outer edge
+	trackEdges.push_back({ {-6.0f, -20.0f}, {-6.0f, 20.f} });
+	trackEdges.push_back({ { -6.0f, 20.0f },{ 2.0f, 35.0f } });
+	trackEdges.push_back({ { 2.0f, 35.0f },{ 40.0f, 35.0f } });
+	trackEdges.push_back({ { 40.0f, 35.0f },{ 47.0f, 25.0f } });
+	trackEdges.push_back({ { 47.0f, 25.0f },{ 40.0f, -42.0f } });
+	trackEdges.push_back({ { 40.0f, -42.0f },{ 4.0f, -40.0f } });
+	trackEdges.push_back({ { 4.0f, -40.0f },{ -6.0f, -20.0f } });
+
+	// inner edge
+	trackEdges.push_back({ {6.0f, 20.0f}, {6.0f, -20.f} });
+	trackEdges.push_back({ {6.0f, 20.0f}, {12.0f, 30.0f} });
+	trackEdges.push_back({ { 12.0f, 30.0f },{ 30.0f, 30.0f } });
+	trackEdges.push_back({ { 30.0f, 30.0f },{ 33.0f, 25.0f } });
+	trackEdges.push_back({ { 33.0f, 25.0f },{ 33.0f, -30.0f } });
+	trackEdges.push_back({ { 33.0f, -30.0f },{ 30.0f, -33.0f } });
+	trackEdges.push_back({ { 30.0f, -33.0f },{ 14.0f, -28.0f } });
+	trackEdges.push_back({ { 14.0f, -28.0f },{ 6.0f, -20.0f } });
+
+	startLine.push_back({ {-6.0f, 0.6f}, {6.0f, 0.6f} });
+	startLine.push_back({ { -6.0f, 1.5f },{ 6.0f, 1.5f } });
 }
+
 
 class Car {
 public:
@@ -53,6 +79,10 @@ public:
 	float vel_x;	// stores car velocity
 	float vel_y;
 
+	// create corner coords
+	float tl_x, tl_y, tr_x, tr_y, bl_x, bl_y, br_x, br_y;
+	float tl_xr, tl_yr, tr_xr, tr_yr, bl_xr, bl_yr, br_xr, br_yr;
+	
 	// constructor sets car's default position
 	Car(float x, float y) {
 	pos_x = x;
@@ -62,12 +92,7 @@ public:
 	}
 
 	// returns the corners used for oriented bounding box collision detection
-	std::vector<line> getCarCorners() {
-
-		// create corner coords, store in vector
-		float tl_x, tl_y, tr_x, tr_y, bl_x, bl_y, br_x, br_y;
-		float tl_xr, tl_yr, tr_xr, tr_yr, bl_xr, bl_yr, br_xr, br_yr;
-
+	std::vector<edge> edges() {
 		// set corner values for collision detection
 		tl_x = pos_x - carWidthHalf;
 		tl_y = pos_y + carLengthHalf;
@@ -89,20 +114,19 @@ public:
 		br_y -= pos_y;
 		
 		// rotation
-		tl_xr = (tl_x * cos((rot * piOver180)) - (tl_y * sin((rot * piOver180))));
-		tl_yr = (tl_x * sin((rot * piOver180)) + (tl_y * cos((rot * piOver180))));
+		tl_xr = (tl_x * cos(rot * piOver180) - (tl_y * sin(rot * piOver180)));
+		tl_yr = (tl_x * sin(rot * piOver180) + (tl_y * cos(rot * piOver180)));
 
-		tr_xr = (tr_x * cos((rot * piOver180)) - (tr_y * sin((rot * piOver180))));
-		tr_yr = (tr_x * sin((rot * piOver180)) + (tr_y * cos((rot * piOver180))));
+		tr_xr = (tr_x * cos(rot * piOver180) - (tr_y * sin(rot * piOver180)));
+		tr_yr = (tr_x * sin(rot * piOver180) + (tr_y * cos(rot * piOver180)));
 
-		bl_xr = (bl_x * cos((rot * piOver180)) - (bl_y * sin((rot * piOver180))));
-		bl_yr = (bl_x * sin((rot * piOver180)) + (bl_y * cos((rot * piOver180))));
+		bl_xr = (bl_x * cos(rot * piOver180) - (bl_y * sin(rot * piOver180)));
+		bl_yr = (bl_x * sin(rot * piOver180) + (bl_y * cos(rot * piOver180)));
 
-		br_xr = (br_x * cos((rot * piOver180)) - (br_y * sin((rot * piOver180))));
-		br_yr = (br_x * sin((rot * piOver180)) + (br_y * cos((rot * piOver180))));
+		br_xr = (br_x * cos(rot * piOver180) - (br_y * sin(rot * piOver180)));
+		br_yr = (br_x * sin(rot * piOver180) + (br_y * cos(rot * piOver180)));
 
 		// translate back
-		// translation to origin
 		tl_xr += pos_x;
 		tl_yr += pos_y;
 		tr_xr += pos_x;
@@ -112,41 +136,34 @@ public:
 		br_xr += pos_x;
 		br_yr += pos_y;
 
-		std::vector<line> carCorners;
-		// left
-		carCorners.push_back({ tl_xr, tl_yr, bl_xr, bl_yr });
-
-		// top
-		carCorners.push_back({ tl_xr, tl_yr, tr_xr, tr_yr });
-
-		// right
-		carCorners.push_back({ tr_xr, tr_yr, br_xr, br_yr });
-
-		// bottom
-		carCorners.push_back({ br_xr, br_yr, bl_xr, bl_yr });
-
-		return carCorners;
+		std::vector<edge> edges;
+		edges.push_back({ {tl_xr, tl_yr}, {bl_xr, bl_yr} }); // left
+		edges.push_back({ {tl_xr, tl_yr}, {tr_xr, tr_yr} });	// top
+		edges.push_back({ {tr_xr, tr_yr}, {br_xr, br_yr} }); // right
+		edges.push_back({ {br_xr, br_yr}, {bl_xr, bl_yr} }); // bottom
+		return edges;
 	}
 };
 
-// initialise objects for game
+// initialise cars
 Car playerCar = Car(0, 0);
+Car cpuCar1 = Car(2, 0);
 
-// takes in two vectors containing <lines>, checks to see if any of them intersect
-bool isColliding(std::vector<line> a, std::vector<line> b) {
+// takes in two vectors containing <edges>, checks to see if any of them intersect
+bool isColliding(std::vector<edge> a, std::vector<edge> b) {
 	float dist1 = 0;
 	float dist2 = 0;
 
 	// loop through every combination of both vectors
-	for (int i = 0; i < a.size(); i++) {
-		for (int j = 0; j < b.size(); j++) {
+	for (size_t i = 0; i < a.size(); i++) {
+		for (size_t j = 0; j < b.size(); j++) {
 
 			// calculate distance to point of intersection
-			float dist1 = ((b[j].x2 - b[j].x1) * (a[i].y1 - b[j].y1) - (b[j].y2 - b[j].y1) * (a[i].x1 - b[j].x1)) /
-				((b[j].y2 - b[j].y1) * (a[i].x2 - a[i].x1) - (b[j].x2 - b[j].x1) * (a[i].y2 - a[i].y1));
+			float dist1 = ((b[j].p2.x - b[j].p1.x) * (a[i].p1.y - b[j].p1.y) - (b[j].p2.y - b[j].p1.y) * (a[i].p1.x - b[j].p1.x)) /
+				((b[j].p2.y - b[j].p1.y) * (a[i].p2.x - a[i].p1.x) - (b[j].p2.x - b[j].p1.x) * (a[i].p2.y - a[i].p1.y));
 
-			float dist2 = ((a[i].x2 - a[i].x1) * (a[i].y1 - b[j].y1) - (a[i].y2 - a[i].y1) * (a[i].x1 - b[j].x1)) /
-				((b[j].y2 - b[j].y1) * (a[i].x2 - a[i].x1) - (b[j].x2 - b[j].x1) * (a[i].y2 - a[i].y1));
+			float dist2 = ((a[i].p2.x - a[i].p1.x) * (a[i].p1.y - b[j].p1.y) - (a[i].p2.y - a[i].p1.y) * (a[i].p1.x - b[j].p1.x)) /
+				((b[j].p2.y - b[j].p1.y) * (a[i].p2.x - a[i].p1.x) - (b[j].p2.x - b[j].p1.x) * (a[i].p2.y - a[i].p1.y));
 
 			// if dist1 and dist1 are both between 0 and 1, there is a collision
 			if (dist1 >= 0 && dist1 <= 1 && dist2 >= 0 && dist2 <= 1)
@@ -157,6 +174,31 @@ bool isColliding(std::vector<line> a, std::vector<line> b) {
 	// no collisions detected
 	return false;
 }
+
+// compares a vector of edges against a single edge
+bool isColliding(std::vector<edge> a, edge b) {
+	float dist1 = 0;
+	float dist2 = 0;
+
+	// loop through every combination of both vectors
+	for (size_t i = 0; i < a.size(); i++) {
+			// calculate distance to point of intersection
+			float dist1 = ((b.p2.x - b.p1.x) * (a[i].p1.y - b.p1.y) - (b.p2.y - b.p1.y) * (a[i].p1.x - b.p1.x)) /
+				((b.p2.y - b.p1.y) * (a[i].p2.x - a[i].p1.x) - (b.p2.x - b.p1.x) * (a[i].p2.y - a[i].p1.y));
+
+			float dist2 = ((a[i].p2.x - a[i].p1.x) * (a[i].p1.y - b.p1.y) - (a[i].p2.y - a[i].p1.y) * (a[i].p1.x - b.p1.x)) /
+				((b.p2.y - b.p1.y) * (a[i].p2.x - a[i].p1.x) - (b.p2.x - b.p1.x) * (a[i].p2.y - a[i].p1.y));
+
+			// if dist1 and dist1 are both between 0 and 1, there is a collision
+			if (dist1 >= 0 && dist1 <= 1 && dist2 >= 0 && dist2 <= 1)
+				return true;		
+	}
+
+	// no collisions detected
+	return false;
+}
+
+
 
 // processes key presses
 void keyOperations(void) {
@@ -171,23 +213,13 @@ void keyOperations(void) {
 		playerCar.acceleration -= 0.000009f;
 
 
-	if (keyStates['a']) {
+	if (keyStates['a']) 
 		playerCar.rot += 0.05f;
 
-		// disable rotation if colliding
-		if (isColliding(playerCar.getCarCorners(), trackPoints)) {
-			playerCar.rot -= 0.05f;
-		}
-	}
 
-	if (keyStates['d']) {
+	if (keyStates['d']) 
 		playerCar.rot -= 0.05f;
 		
-		// disable rotation if colliding
-		if (isColliding(playerCar.getCarCorners(), trackPoints)) {
-			playerCar.rot += 0.05f;
-		}
-	}
 }
 
 // processes special key presses
@@ -236,6 +268,45 @@ int loadTextures()
 	return true;
 }
 
+// lap timer 
+bool startLineHit = false;	// stores if player has hit start line
+bool lapStarted = false;	// stores if player has moved past the start line
+float seconds = 0.0f;
+float bestLap = NULL;
+
+void doLapTimer() {
+	
+	// car hitting finish line after a lap
+	if (startLineHit == false && lapStarted == true && isColliding(playerCar.edges(), startLine[0])) {
+		
+		// if no best lap set, first lap time is the best lap
+		if (bestLap == NULL)
+			bestLap = seconds;
+
+		// check for best lap time
+		if (seconds < bestLap) {
+			bestLap = seconds;
+		}
+
+		// reset lap timer
+		seconds = 0.0f;
+		
+	}
+
+	// reset flag for start line being hit
+	startLineHit = false;
+
+	// checks to see if playerCar is hitting startLine
+	if (isColliding(playerCar.edges(), startLine[0])) { // startLine[0] is the bottom of the start/finish line
+		startLineHit = true;
+
+		// starts lap timer if not already started
+		if (!lapStarted)
+			lapStarted = true;
+	}
+}
+
+
 // draws background
 void renderBackground(void) {
 	// enable and bind texture
@@ -245,47 +316,46 @@ void renderBackground(void) {
 	// draw vertices
 	glBegin(GL_QUADS);
 	glTexCoord2d(0.0, 0.0);
-	glVertex3f(-5000.0f, -5000.0f, 0.0f);	// bottom left
+	glVertex3f(-100.0f, -100.0f, 0.0f);	// bottom left
 
-	glTexCoord2d(0.0, 5000.0);
-	glVertex3f(-5000.0f, 5000.0f, 0.0f);	// top left
+	glTexCoord2d(0.0, 100.0);
+	glVertex3f(-100.0f, 100.0f, 0.0f);	// top left
 
-	glTexCoord2d(5000.0, 5000.0);
-	glVertex3f(5000.0f, 5000.0f, 0.0f);	// top right
+	glTexCoord2d(100.0, 100.0);
+	glVertex3f(100.0f, 100.0f, 0.0f);	// top right
 
-	glTexCoord2d(5000.0, 0.0);
-	glVertex3f(5000.0f, -5000.0f, 0.0f);	// bottom right
+	glTexCoord2d(100.0, 0.0);
+	glVertex3f(100.0f, -100.0f, 0.0f);	// bottom right
 	
 	glEnd();
 	glDisable(GL_TEXTURE_2D); // disable texture drawing
 }
 
-void renderCars(void) {
+void renderCars(Car &car) {
 	glPushMatrix();
 		
 	// translate to centre of player car, rotate, then translate back
-	glTranslatef(playerCar.pos_x, playerCar.pos_y, 0.0f);
-	glRotatef(playerCar.rot, 0.0, 0.0, 1.0);
-	glTranslatef(-playerCar.pos_x, -playerCar.pos_y, 0.0f);
+	glTranslatef(car.pos_x, car.pos_y, 0.0f);
+	glRotatef(car.rot, 0.0, 0.0, 1.0);
+	glTranslatef(-car.pos_x, -car.pos_y, 0.0f);
 
 	// apply velocity vector
-	playerCar.vel_x = -sin(playerCar.rot * piOver180);	// get x velocity after converting to rads
-	playerCar.vel_y = cos(playerCar.rot * piOver180);	// get y velocity after converting to rads
+	car.vel_x = -sin(car.rot * piOver180);	// get x velocity after converting to rads
+	car.vel_y = cos(car.rot * piOver180);	// get y velocity after converting to rads
 	
 	// collision handling
-	if (isColliding(playerCar.getCarCorners(), trackPoints)) {
+	if (isColliding(car.edges(), trackEdges)) {
 		// undo car's movement that caused collision
-		playerCar.pos_x -= playerCar.acceleration * playerCar.vel_x; 
-		playerCar.pos_y -= playerCar.acceleration * playerCar.vel_y;
+		car.pos_x -= car.acceleration * car.vel_x; 
+		car.pos_y -= car.acceleration * car.vel_y;
 
-
-		// set acceleration to 0 so next frame doesn't re-cause collision (will cause clipping)
-		playerCar.acceleration = 0;
+		// set acceleration to 0 so next frame doesn't re-cause collision 
+		car.acceleration = 0;
 	}
 	// if no collision happens, translate car
 	else {
-		playerCar.pos_x += playerCar.acceleration * playerCar.vel_x;
-		playerCar.pos_y += playerCar.acceleration * playerCar.vel_y;
+		car.pos_x += car.acceleration * car.vel_x;
+		car.pos_y += car.acceleration * car.vel_y;
 	}
 
 	// enable and bind texture
@@ -295,16 +365,16 @@ void renderCars(void) {
 	// draw car
 	glBegin(GL_QUADS);
 	glTexCoord2d(0.0, 0.0);
-	glVertex3f(playerCar.pos_x - carWidthHalf, playerCar.pos_y - carLengthHalf, 0.0f); // bottom left
+	glVertex3f(car.pos_x - carWidthHalf, car.pos_y - carLengthHalf, 0.0f); // bottom left
 
 	glTexCoord2d(0.0, 1.0);
-	glVertex3f(playerCar.pos_x - carWidthHalf, playerCar.pos_y + carLengthHalf, 0.0f); // top left
+	glVertex3f(car.pos_x - carWidthHalf, car.pos_y + carLengthHalf, 0.0f); // top left
 
 	glTexCoord2d(1.0, 1.0);
-	glVertex3f(playerCar.pos_x + carWidthHalf, playerCar.pos_y + carLengthHalf, 0.0f); // top right
+	glVertex3f(car.pos_x + carWidthHalf, car.pos_y + carLengthHalf, 0.0f); // top right
 	
 	glTexCoord2d(1.0, 0.0);
-	glVertex3f(playerCar.pos_x + carWidthHalf, playerCar.pos_y - carLengthHalf, 0.0f); // bottom right
+	glVertex3f(car.pos_x + carWidthHalf, car.pos_y - carLengthHalf, 0.0f); // bottom right
 	glEnd();
 	
 	
@@ -314,10 +384,10 @@ void renderCars(void) {
 	// draw bounding box (toggled by debugMode flag)
 	if (debugMode) {
 		glBegin(GL_LINES);
-		for (int i = 0; i < playerCar.getCarCorners().size(); i++)
+		for (size_t i = 0; i < car.edges().size(); i++)
 		{
-			glVertex3f(playerCar.getCarCorners()[i].x1, playerCar.getCarCorners()[i].y1, 0.0f);
-			glVertex3f(playerCar.getCarCorners()[i].x2, playerCar.getCarCorners()[i].y2, 0.0f);
+			glVertex3f(car.edges()[i].p1.x, car.edges()[i].p1.y, 0.0f);
+			glVertex3f(car.edges()[i].p2.x, car.edges()[i].p2.y, 0.0f);
 		}
 		glEnd();
 	}
@@ -326,13 +396,24 @@ void renderCars(void) {
 void renderTrack(void) {
 	glBegin(GL_LINES);
 
-	for (int i = 0; i < trackPoints.size(); i++)
+	for (size_t i = 0; i < trackEdges.size(); i++)
 	{
-		glVertex3f(trackPoints[i].x1, trackPoints[i].y1, 0.0f);
-		glVertex3f(trackPoints[i].x2, trackPoints[i].y2, 0.0f);
+		glVertex3f(trackEdges[i].p1.x, trackEdges[i].p1.y, 0.0f);
+		glVertex3f(trackEdges[i].p2.x, trackEdges[i].p2.y, 0.0f);
 	}
 
 	glEnd();
+
+	glBegin(GL_LINES);
+
+	for (size_t i = 0; i < startLine.size(); i++)
+	{
+		glVertex3f(startLine[i].p1.x, startLine[i].p1.y, 0.0f);
+		glVertex3f(startLine[i].p2.x, startLine[i].p2.y, 0.0f);
+	}
+
+	glEnd();
+
 
 }
 
@@ -340,7 +421,43 @@ void camera(void) {
 	glTranslatef(-cam_x, -cam_y, 0.0f);
 }
 
-void display(void) {
+// variables for holding/formatting output
+std::stringstream sstr;
+std::string outputString;
+
+void renderTimer() {
+	// set to projection mode to draw as a HUD
+	glMatrixMode(GL_PROJECTION);
+	glPushMatrix();		// save matrix
+		glLoadIdentity(); // reset matrix
+		glOrtho(0, 800, 600, 0, 0, -1); // ortho transform to width/height of screen
+		glMatrixMode(GL_MODELVIEW);  // set back to modelview
+		glPushMatrix(); 
+			glLoadIdentity();
+			
+			// text rendering code
+
+			// lap timer
+			glRasterPos2i(20, 20);
+			sstr << "Lap time  : " << std::fixed << std::setprecision(2) << seconds; // convert float to 2dp
+			outputString = sstr.str();
+			glutBitmapString(GLUT_BITMAP_HELVETICA_18, (const unsigned char*)outputString.c_str());
+			sstr.str(std::string()); // clears string stream
+
+			// best lap display
+			glRasterPos2i(20, 50);
+			sstr << "Best lap time : " << std::fixed << std::setprecision(2) << bestLap; // convert float to 2dp
+			outputString = sstr.str();
+			glutBitmapString(GLUT_BITMAP_HELVETICA_18, (const unsigned char*)outputString.c_str());
+			sstr.str(std::string()); // clears string stream
+	
+			glMatrixMode(GL_PROJECTION);
+		glPopMatrix();
+	glMatrixMode(GL_MODELVIEW);
+	glPopMatrix();
+}
+
+void display(void) {	
 	// process key operations
 	keyOperations();
 	keySpecialOperations();
@@ -360,11 +477,13 @@ void display(void) {
 	camera();
 
 	// push back everything 5 units on the z axis, so we can see it
-	glTranslatef(0.0f, 0.0f, -5.0f);
+	glTranslatef(0.0f, 0.0f, -15.0f);
 
 	renderBackground();
-	renderCars();
+	renderCars(playerCar);
 	renderTrack();
+	renderTimer();
+	doLapTimer();
 
 	// reset rotation
 	if (playerCar.rot > 360)
@@ -378,6 +497,7 @@ void display(void) {
 
 }
 
+// 50ms timer
 void timer(int t) {
 	playerCar.pos_y += playerCar.acceleration;
 	
@@ -387,6 +507,10 @@ void timer(int t) {
 	if (playerCar.acceleration < 0)
 		playerCar.acceleration = 0;
 
+	if (startLineHit || lapStarted) {
+		seconds += 0.05;
+	}
+	
 	glutTimerFunc(50, timer, 0);
 }
 
@@ -434,7 +558,7 @@ int main(int argc, char **argv) {
 	glutInitDisplayMode(GLUT_DOUBLE);
 
 	// set the size and position of the GLUT window
-	glutInitWindowSize(600, 600);
+	glutInitWindowSize(800, 600);
 	glutInitWindowPosition(100, 100);
 
 	// create the window, with a title
