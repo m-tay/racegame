@@ -15,11 +15,12 @@ bool* keySpecialStates = new bool[256]();
 GLuint texture[2];
 
 // global variables
-bool debugMode = false;	// draws bounding boxes
+bool debugMode = true;	// draws bounding boses
 float carLength = 1.0f;
 float carWidth = 0.5f;
-float decelRate = 0.00009f;
-float maxSpeed = 0.007f;
+float decelRate = 0.000009f;
+float maxSpeed = 0.014f;
+float rotRate = 0.1f;
 
 // pre-compute divisions 
 float carLengthHalf = carLength / 2;
@@ -31,12 +32,12 @@ float cam_x = 0;
 float cam_y = 0;
 
 // line (track and car drawing) geometry
-struct vertex {
+struct point {
 	float x, y;
 };
 
 struct edge {
-	vertex p1, p2;
+	point p1, p2;
 };
 
 // stores each line of the track
@@ -48,9 +49,9 @@ std::vector<edge> startLine;
 void initTrack() {
 	// outer edge
 	trackEdges.push_back({ {-6.0f, -20.0f}, {-6.0f, 20.f} });
-	trackEdges.push_back({ { -6.0f, 20.0f },{ 2.0f, 35.0f } });
-	trackEdges.push_back({ { 2.0f, 35.0f },{ 40.0f, 35.0f } });
-	trackEdges.push_back({ { 40.0f, 35.0f },{ 47.0f, 25.0f } });
+	trackEdges.push_back({ { -6.0f, 20.0f },{ 2.0f, 40.0f } });
+	trackEdges.push_back({ { 2.0f, 40.0f },{ 40.0f, 40.0f } });
+	trackEdges.push_back({ { 40.0f, 40.0f },{ 47.0f, 25.0f } });
 	trackEdges.push_back({ { 47.0f, 25.0f },{ 40.0f, -42.0f } });
 	trackEdges.push_back({ { 40.0f, -42.0f },{ 4.0f, -40.0f } });
 	trackEdges.push_back({ { 4.0f, -40.0f },{ -6.0f, -20.0f } });
@@ -69,88 +70,161 @@ void initTrack() {
 	startLine.push_back({ { -6.0f, 1.5f },{ 6.0f, 1.5f } });
 }
 
+// store and create waypoints used by AI cars
+std::vector<point> waypoints;
+
+void initWaypoints() {
+	waypoints.push_back({ 5.0f, 20.0f });
+	//waypoints.push_back({ 8.0f, 29.0f });
+	waypoints.push_back({ 12.0f, 31.0f });
+	waypoints.push_back({ 23.0f, 35.0f });
+	waypoints.push_back({ 36.0f, 28.0f });
+	waypoints.push_back({ 39.0f, 23.0f });
+	waypoints.push_back({ 37.0f, -24.0f });
+	waypoints.push_back({ 27.0f, -36.0f });
+	waypoints.push_back({ 6.5f, -29.0f });
+	waypoints.push_back({ 3.0f, -21.0f });
+	waypoints.push_back({ 3.0f, -1.0f });
+
+}
 
 class Car {
 public:
 	float pos_x;	// stores the CENTRE POINT of the car
 	float pos_y;
 	float rot;		// rotation
-	float acceleration;
+	float speed;
+	bool isAccelerating;
+	bool isBraking;
 	float vel_x;	// stores car velocity
 	float vel_y;
+	bool playerControlled;
+	int nextWaypoint; // stores the waypoint cpu cars will seek
 
 	// create corner coords
 	float tl_x, tl_y, tr_x, tr_y, bl_x, bl_y, br_x, br_y;
 	float tl_xr, tl_yr, tr_xr, tr_yr, bl_xr, bl_yr, br_xr, br_yr;
 	
 	// constructor sets car's default position
-	Car(float x, float y) {
+	Car(float x, float y, bool humanPlayer) {
 	pos_x = x;
 	pos_y = y;
+	playerControlled = humanPlayer;
 	rot = 0.0f;
-	acceleration = 0.0f;
+	speed = 0.0f;
+	isAccelerating = false;
+	nextWaypoint = 0;
 	}
 
-	// returns the corners used for oriented bounding box collision detection
-	std::vector<edge> edges() {
-		// set corner values for collision detection
-		tl_x = pos_x - carWidthHalf;
-		tl_y = pos_y + carLengthHalf;
-		tr_x = pos_x + carWidthHalf;
-		tr_y = pos_y + carLengthHalf;
-		bl_x = pos_x - carWidthHalf;
-		bl_y = pos_y - carLengthHalf;
-		br_x = pos_x + carWidthHalf;
-		br_y = pos_y - carLengthHalf;
-
-		// translation to origin
-		tl_x -= pos_x;
-		tl_y -= pos_y;
-		tr_x -= pos_x;
-		tr_y -= pos_y;
-		bl_x -= pos_x;
-		bl_y -= pos_y;
-		br_x -= pos_x;
-		br_y -= pos_y;
-		
-		// rotation
-		tl_xr = (tl_x * cos(rot * piOver180) - (tl_y * sin(rot * piOver180)));
-		tl_yr = (tl_x * sin(rot * piOver180) + (tl_y * cos(rot * piOver180)));
-
-		tr_xr = (tr_x * cos(rot * piOver180) - (tr_y * sin(rot * piOver180)));
-		tr_yr = (tr_x * sin(rot * piOver180) + (tr_y * cos(rot * piOver180)));
-
-		bl_xr = (bl_x * cos(rot * piOver180) - (bl_y * sin(rot * piOver180)));
-		bl_yr = (bl_x * sin(rot * piOver180) + (bl_y * cos(rot * piOver180)));
-
-		br_xr = (br_x * cos(rot * piOver180) - (br_y * sin(rot * piOver180)));
-		br_yr = (br_x * sin(rot * piOver180) + (br_y * cos(rot * piOver180)));
-
-		// translate back
-		tl_xr += pos_x;
-		tl_yr += pos_y;
-		tr_xr += pos_x;
-		tr_yr += pos_y;
-		bl_xr += pos_x;
-		bl_yr += pos_y;
-		br_xr += pos_x;
-		br_yr += pos_y;
-
-		std::vector<edge> edges;
-		edges.push_back({ {tl_xr, tl_yr}, {bl_xr, bl_yr} }); // left
-		edges.push_back({ {tl_xr, tl_yr}, {tr_xr, tr_yr} });	// top
-		edges.push_back({ {tr_xr, tr_yr}, {br_xr, br_yr} }); // right
-		edges.push_back({ {br_xr, br_yr}, {bl_xr, bl_yr} }); // bottom
-		return edges;
+	// calculates car velocity
+	void calcVelocity() {
+		vel_x = -sin(rot * piOver180);	// get x velocity after converting to rads
+		vel_y = cos(rot * piOver180);	// get y velocity after converting to rads
 	}
+
+void accelerate() {
+	if (speed < maxSpeed)
+		speed += 0.00009f;
+}
+
+
+// returns the corners used for oriented bounding box collision detection
+std::vector<edge> edges() {
+	// set corner values for collision detection
+	tl_x = pos_x - carWidthHalf;
+	tl_y = pos_y + carLengthHalf;
+	tr_x = pos_x + carWidthHalf;
+	tr_y = pos_y + carLengthHalf;
+	bl_x = pos_x - carWidthHalf;
+	bl_y = pos_y - carLengthHalf;
+	br_x = pos_x + carWidthHalf;
+	br_y = pos_y - carLengthHalf;
+
+	// translation to origin
+	tl_x -= pos_x;
+	tl_y -= pos_y;
+	tr_x -= pos_x;
+	tr_y -= pos_y;
+	bl_x -= pos_x;
+	bl_y -= pos_y;
+	br_x -= pos_x;
+	br_y -= pos_y;
+
+	// rotation
+	tl_xr = (tl_x * cos(rot * piOver180) - (tl_y * sin(rot * piOver180)));
+	tl_yr = (tl_x * sin(rot * piOver180) + (tl_y * cos(rot * piOver180)));
+
+	tr_xr = (tr_x * cos(rot * piOver180) - (tr_y * sin(rot * piOver180)));
+	tr_yr = (tr_x * sin(rot * piOver180) + (tr_y * cos(rot * piOver180)));
+
+	bl_xr = (bl_x * cos(rot * piOver180) - (bl_y * sin(rot * piOver180)));
+	bl_yr = (bl_x * sin(rot * piOver180) + (bl_y * cos(rot * piOver180)));
+
+	br_xr = (br_x * cos(rot * piOver180) - (br_y * sin(rot * piOver180)));
+	br_yr = (br_x * sin(rot * piOver180) + (br_y * cos(rot * piOver180)));
+
+	// translate back
+	tl_xr += pos_x;
+	tl_yr += pos_y;
+	tr_xr += pos_x;
+	tr_yr += pos_y;
+	bl_xr += pos_x;
+	bl_yr += pos_y;
+	br_xr += pos_x;
+	br_yr += pos_y;
+
+	std::vector<edge> edges;
+	edges.push_back({ {tl_xr, tl_yr}, {bl_xr, bl_yr} }); // left
+	edges.push_back({ {tl_xr, tl_yr}, {tr_xr, tr_yr} }); // top
+	edges.push_back({ {tr_xr, tr_yr}, {br_xr, br_yr} }); // right
+	edges.push_back({ {br_xr, br_yr}, {bl_xr, bl_yr} }); // bottom
+	return edges;
+}
+
+float getAngleToWaypoint() {
+	point newPosition;
+	newPosition.x = pos_x + ((vel_x * speed) + 1);
+	newPosition.y = pos_y + ((vel_y * speed) + 1);
+
+	float angle;
+
+	float a = 0, b = 0, c = 0; // triangle lengths
+	a = sqrt(pow((tl_xr - bl_xr), 2) + pow((tl_yr - bl_yr), 2));
+	b = sqrt(pow((bl_xr - waypoints[nextWaypoint].x), 2) + pow((bl_yr - waypoints[nextWaypoint].y), 2));
+	c = sqrt(pow((tl_xr - waypoints[nextWaypoint].x), 2) + pow((tl_yr - waypoints[nextWaypoint].y), 2));
+
+	angle = acos((pow(a, 2) + pow(b, 2) - pow(c, 2)) / (2 * a*b));
+
+	return angle;
+}
+
+// does circle/circle collision detection to determine whether it has hit waypoint
+// this will be used to then seek the next waypoint
+void checkWaypointHit() {
+	float dist_x = pos_x - waypoints[nextWaypoint].x;
+	float dist_y = pos_y - waypoints[nextWaypoint].y;
+	float dist = sqrt(pow(dist_x, 2) + pow(dist_y, 2));
+
+	if (dist <= 1.5) {
+		if (nextWaypoint == waypoints.size() - 1) { // check if final waypoint reached
+			nextWaypoint = 0;						// reset back to first waypoint
+		}
+		else
+			nextWaypoint++;
+		}		
+	}
+
 };
 
 // initialise cars
-Car playerCar = Car(0, 0);
-Car cpuCar1 = Car(2, 0);
+Car playerCar = Car(0, 0, true);
+Car cpuCar1 = Car(2, 0, false);
+
+// store all cars in a vector
+std::vector<Car*> allCars({ &playerCar, &cpuCar1 });
 
 // takes in two vectors containing <edges>, checks to see if any of them intersect
-bool isColliding(std::vector<edge> a, std::vector<edge> b) {
+bool isColliding(std::vector<edge> &a, std::vector<edge> &b) {
 	float dist1 = 0;
 	float dist2 = 0;
 
@@ -176,7 +250,7 @@ bool isColliding(std::vector<edge> a, std::vector<edge> b) {
 }
 
 // compares a vector of edges against a single edge
-bool isColliding(std::vector<edge> a, edge b) {
+bool isColliding(std::vector<edge> &a, edge &b) {
 	float dist1 = 0;
 	float dist2 = 0;
 
@@ -198,28 +272,25 @@ bool isColliding(std::vector<edge> a, edge b) {
 	return false;
 }
 
-
-
 // processes key presses
 void keyOperations(void) {
 	if (keyStates[27]) // escape
 		exit(0);
 		
-	if (keyStates['w'] && playerCar.acceleration < maxSpeed)
-		playerCar.acceleration += 0.000009f;
-	
+	if (keyStates['w']) {
+		playerCar.isAccelerating = true;
+	}
 
-	if (keyStates['s']) 
-		playerCar.acceleration -= 0.000009f;
+	if (keyStates['s'])
+		playerCar.isBraking = true;
 
 
 	if (keyStates['a']) 
-		playerCar.rot += 0.05f;
+		playerCar.rot += rotRate;
 
 
 	if (keyStates['d']) 
-		playerCar.rot -= 0.05f;
-		
+		playerCar.rot -= rotRate;
 }
 
 // processes special key presses
@@ -340,22 +411,33 @@ void renderCars(Car &car) {
 	glTranslatef(-car.pos_x, -car.pos_y, 0.0f);
 
 	// apply velocity vector
-	car.vel_x = -sin(car.rot * piOver180);	// get x velocity after converting to rads
-	car.vel_y = cos(car.rot * piOver180);	// get y velocity after converting to rads
+	car.calcVelocity();
 	
-	// collision handling
+	// collision detection against walls
 	if (isColliding(car.edges(), trackEdges)) {
 		// undo car's movement that caused collision
-		car.pos_x -= car.acceleration * car.vel_x; 
-		car.pos_y -= car.acceleration * car.vel_y;
+		car.pos_x -= car.speed * car.vel_x; 
+		car.pos_y -= car.speed * car.vel_y;
 
 		// set acceleration to 0 so next frame doesn't re-cause collision 
-		car.acceleration = 0;
+		car.speed = 0;
 	}
 	// if no collision happens, translate car
 	else {
-		car.pos_x += car.acceleration * car.vel_x;
-		car.pos_y += car.acceleration * car.vel_y;
+		car.pos_x += car.speed * car.vel_x;
+		car.pos_y += car.speed * car.vel_y;
+	}
+
+	// collision detection against cpu cars 
+	if (car.playerControlled) {
+		if (isColliding(car.edges(), cpuCar1.edges())) {
+			// undo car's movement that caused collision
+			car.pos_x -= car.speed * car.vel_x;
+			car.pos_y -= car.speed * car.vel_y;
+
+			// set acceleration to 0 so next frame doesn't re-cause collision 
+			car.speed = 0;
+		}
 	}
 
 	// enable and bind texture
@@ -390,7 +472,25 @@ void renderCars(Car &car) {
 			glVertex3f(car.edges()[i].p2.x, car.edges()[i].p2.y, 0.0f);
 		}
 		glEnd();
+		
+		// draws waypointing triangle
+		glBegin(GL_LINES);
+		glVertex3f(cpuCar1.tl_xr, cpuCar1.tl_yr, 0.0f);
+		glVertex3f(cpuCar1.bl_xr, cpuCar1.bl_yr, 0.0f);
+		glEnd();
+
+		glBegin(GL_LINES);
+		glVertex3f(cpuCar1.bl_xr, cpuCar1.bl_yr, 0.0f);
+		glVertex3f(waypoints[cpuCar1.nextWaypoint].x, waypoints[cpuCar1.nextWaypoint].y, 0.0f);
+		glEnd();
+
+		glBegin(GL_LINES);
+		glVertex3f(cpuCar1.tl_xr, cpuCar1.tl_yr, 0.0f);
+		glVertex3f(waypoints[cpuCar1.nextWaypoint].x, waypoints[cpuCar1.nextWaypoint].y, 0.0f);
+		glEnd();
+
 	}
+
 }
 
 void renderTrack(void) {
@@ -415,6 +515,17 @@ void renderTrack(void) {
 	glEnd();
 
 
+}
+
+void renderWaypoints() {
+	for (size_t i = 0; i < waypoints.size(); i++) {
+		glBegin(GL_LINES);
+		glVertex3f(waypoints[i].x + 0.2f, waypoints[i].y, 0.0f);
+		glVertex3f(waypoints[i].x - 0.2f, waypoints[i].y, 0.0f);
+		glVertex3f(waypoints[i].x, waypoints[i].y + 0.2f, 0.0f);
+		glVertex3f(waypoints[i].x, waypoints[i].y - 0.2f, 0.0f);
+		glEnd();
+	}
 }
 
 void camera(void) {
@@ -457,6 +568,21 @@ void renderTimer() {
 	glPopMatrix();
 }
 
+void drawCoords() {
+	for (int x = -6; x < 47; x++) {
+		for (int y = -42; y < 35; y++)
+		{
+			glRasterPos2i(x, y);
+			sstr << "(" << x << "," << y << ")";
+			outputString = sstr.str();
+			glutBitmapString(GLUT_BITMAP_HELVETICA_10, (const unsigned char*)outputString.c_str());
+			sstr.str(std::string()); // clears string stream
+		}
+	}
+
+}
+
+
 void display(void) {	
 	// process key operations
 	keyOperations();
@@ -480,9 +606,15 @@ void display(void) {
 	glTranslatef(0.0f, 0.0f, -15.0f);
 
 	renderBackground();
+	renderCars(cpuCar1);
 	renderCars(playerCar);
 	renderTrack();
 	renderTimer();
+	if (debugMode) {
+		renderWaypoints();
+		//drawCoords();		// incredibly slow, but useful for plotting track or waypoints
+							// might find it useful to move position of playerCar to see your way round
+	}
 	doLapTimer();
 
 	// reset rotation
@@ -497,21 +629,50 @@ void display(void) {
 
 }
 
-// 50ms timer
-void timer(int t) {
-	playerCar.pos_y += playerCar.acceleration;
-	
-	if (playerCar.acceleration > 0)
-		playerCar.acceleration -= decelRate;
-	
-	if (playerCar.acceleration < 0)
-		playerCar.acceleration = 0;
 
-	if (startLineHit || lapStarted) {
-		seconds += 0.05;
+
+// 5ms timer
+void timer(int t) {
+
+	cpuCar1.isAccelerating = true;
+
+	// apply deceleration
+	for (size_t i = 0; i < allCars.size(); i++) {
+		if (allCars[i]->speed > 0)
+			allCars[i]->speed -= decelRate;
+
+		if (allCars[i]->speed < 0)
+			allCars[i]->speed = 0;
 	}
-	
-	glutTimerFunc(50, timer, 0);
+
+		// increment lap timer
+		if (startLineHit || lapStarted) {
+			seconds += 0.005;
+		}
+
+		// apply acceleration
+	for (size_t i = 0; i < allCars.size(); i++) {
+		if (allCars[i]->isAccelerating) {
+			allCars[i]->accelerate();
+		}
+	}
+
+	if (cpuCar1.getAngleToWaypoint() > 0.005) {
+		cpuCar1.rot -= rotRate;
+	}
+
+
+	cpuCar1.checkWaypointHit();
+
+	// reset car states
+	for (size_t i = 0; i < allCars.size(); i++)
+	{
+		allCars[i]->isAccelerating = false;
+		allCars[i]->isBraking = false;
+	}
+
+	// run timer in 5ms
+	glutTimerFunc(5, timer, 0);
 }
 
 // method to reshape windows
@@ -558,7 +719,7 @@ int main(int argc, char **argv) {
 	glutInitDisplayMode(GLUT_DOUBLE);
 
 	// set the size and position of the GLUT window
-	glutInitWindowSize(800, 600);
+	glutInitWindowSize(1600, 1200);
 	glutInitWindowPosition(100, 100);
 
 	// create the window, with a title
@@ -590,6 +751,9 @@ int main(int argc, char **argv) {
 
 	// initialise the track geometry vector
 	initTrack();
+
+	// initialise the waypoints for cpu cars
+	initWaypoints();
 
 	// enter GLUTs main loop
 	glutMainLoop();
