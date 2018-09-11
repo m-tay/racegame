@@ -12,7 +12,7 @@ bool* keyStates = new bool[256]();
 bool* keySpecialStates = new bool[256]();
 
 // stores all the textures
-GLuint texture[2];
+GLuint texture[4];
 
 // global variables
 bool debugMode = true;	// draws bounding boses
@@ -20,7 +20,7 @@ float carLength = 1.0f;
 float carWidth = 0.5f;
 float decelRate = 0.000009f;
 float maxSpeed = 0.014f;
-float rotRate = 0.1f;
+float rotRate = 0.2f;
 
 // pre-compute divisions 
 float carLengthHalf = carLength / 2;
@@ -75,45 +75,48 @@ std::vector<point> waypoints;
 
 void initWaypoints() {
 	waypoints.push_back({ 5.0f, 20.0f });
-	//waypoints.push_back({ 8.0f, 29.0f });
 	waypoints.push_back({ 12.0f, 31.0f });
 	waypoints.push_back({ 23.0f, 35.0f });
 	waypoints.push_back({ 36.0f, 28.0f });
 	waypoints.push_back({ 39.0f, 23.0f });
 	waypoints.push_back({ 37.0f, -24.0f });
-	waypoints.push_back({ 27.0f, -36.0f });
+	waypoints.push_back({ 30.0f, -36.0f });
 	waypoints.push_back({ 6.5f, -29.0f });
 	waypoints.push_back({ 3.0f, -21.0f });
 	waypoints.push_back({ 3.0f, -1.0f });
-
 }
 
 class Car {
 public:
-	float pos_x;	// stores the CENTRE POINT of the car
+	float pos_x;				// stores the CENTRE POINT of the car
 	float pos_y;
-	float rot;		// rotation
-	float speed;
-	bool isAccelerating;
+	float rot;				// rotation
+	float speed;				// overall speed
+	bool isAccelerating;		// flags for car controls - used in timer()
 	bool isBraking;
-	float vel_x;	// stores car velocity
+	bool turningLeft; 
+	bool turningRight;
+	float vel_x;				// stores car velocity
 	float vel_y;
-	bool playerControlled;
-	int nextWaypoint; // stores the waypoint cpu cars will seek
+	bool playerControlled;	// flag to set whether cpu controlled
+	int nextWaypoint;		// stores the waypoint cpu cars will seek
 
-	// create corner coords
+	// create corner coords - used for collision detection
 	float tl_x, tl_y, tr_x, tr_y, bl_x, bl_y, br_x, br_y;
 	float tl_xr, tl_yr, tr_xr, tr_yr, bl_xr, bl_yr, br_xr, br_yr;
 	
 	// constructor sets car's default position
 	Car(float x, float y, bool humanPlayer) {
-	pos_x = x;
-	pos_y = y;
-	playerControlled = humanPlayer;
-	rot = 0.0f;
-	speed = 0.0f;
-	isAccelerating = false;
-	nextWaypoint = 0;
+		pos_x = x;
+		pos_y = y;
+		playerControlled = humanPlayer;
+		rot = 0.0f;
+		speed = 0.0f;
+		isAccelerating = false;
+		isBraking = false;
+		turningLeft = false;
+		turningRight = false;
+		nextWaypoint = 0;
 	}
 
 	// calculates car velocity
@@ -122,11 +125,18 @@ public:
 		vel_y = cos(rot * piOver180);	// get y velocity after converting to rads
 	}
 
-void accelerate() {
-	if (speed < maxSpeed)
-		speed += 0.00009f;
-}
+	void accelerate() {
+		if (speed < maxSpeed)
+			speed += 0.00009f;
+	}
 
+	void turnLeft() {
+		rot += rotRate;
+	}
+
+	void turnRight() {
+		rot -= rotRate;
+	}
 
 // returns the corners used for oriented bounding box collision detection
 std::vector<edge> edges() {
@@ -277,20 +287,18 @@ void keyOperations(void) {
 	if (keyStates[27]) // escape
 		exit(0);
 		
-	if (keyStates['w']) {
+	if (keyStates['w']) 
 		playerCar.isAccelerating = true;
-	}
-
+	
 	if (keyStates['s'])
 		playerCar.isBraking = true;
 
-
-	if (keyStates['a']) 
-		playerCar.rot += rotRate;
-
-
-	if (keyStates['d']) 
-		playerCar.rot -= rotRate;
+	if (keyStates['a'])
+		playerCar.turningLeft = true;
+		
+	if (keyStates['d'])
+		playerCar.turningRight = true;
+		
 }
 
 // processes special key presses
@@ -312,7 +320,23 @@ int loadTextures()
 
 	texture[1] = SOIL_load_OGL_texture
 	(
-		"textures/car1.png",
+		"textures/Black_viper.png",
+		SOIL_LOAD_AUTO,
+		SOIL_CREATE_NEW_ID,
+		SOIL_FLAG_MIPMAPS
+	);
+
+	texture[2] = SOIL_load_OGL_texture
+	(
+		"textures/Audi.png",
+		SOIL_LOAD_AUTO,
+		SOIL_CREATE_NEW_ID,
+		SOIL_FLAG_MIPMAPS
+	);
+
+	texture[3] = SOIL_load_OGL_texture
+	(
+		"textures/Car.png",
 		SOIL_LOAD_AUTO,
 		SOIL_CREATE_NEW_ID,
 		SOIL_FLAG_MIPMAPS
@@ -603,7 +627,7 @@ void display(void) {
 	camera();
 
 	// push back everything 5 units on the z axis, so we can see it
-	glTranslatef(0.0f, 0.0f, -15.0f);
+	glTranslatef(0.0f, 0.0f, -10.0f);
 
 	renderBackground();
 	renderCars(cpuCar1);
@@ -645,12 +669,12 @@ void timer(int t) {
 			allCars[i]->speed = 0;
 	}
 
-		// increment lap timer
-		if (startLineHit || lapStarted) {
-			seconds += 0.005;
-		}
+	// increment lap timer
+	if (startLineHit || lapStarted) {
+		seconds += 0.005;
+	}
 
-		// apply acceleration
+	// apply acceleration
 	for (size_t i = 0; i < allCars.size(); i++) {
 		if (allCars[i]->isAccelerating) {
 			allCars[i]->accelerate();
@@ -661,6 +685,19 @@ void timer(int t) {
 		cpuCar1.rot -= rotRate;
 	}
 
+	// apply turning
+	for (size_t i = 0; i < allCars.size(); i++) {
+		if (allCars[i]->turningLeft) {
+			allCars[i]->turnLeft();
+		}
+	}
+
+	for (size_t i = 0; i < allCars.size(); i++) {
+		if (allCars[i]->turningRight) {
+			allCars[i]->turnRight();
+		}
+	}
+
 
 	cpuCar1.checkWaypointHit();
 
@@ -669,6 +706,8 @@ void timer(int t) {
 	{
 		allCars[i]->isAccelerating = false;
 		allCars[i]->isBraking = false;
+		allCars[i]->turningLeft = false;
+		allCars[i]->turningRight = false;
 	}
 
 	// run timer in 5ms
@@ -719,7 +758,7 @@ int main(int argc, char **argv) {
 	glutInitDisplayMode(GLUT_DOUBLE);
 
 	// set the size and position of the GLUT window
-	glutInitWindowSize(1600, 1200);
+	glutInitWindowSize(800, 600);
 	glutInitWindowPosition(100, 100);
 
 	// create the window, with a title
